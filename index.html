@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Grid Navigation Game</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      background: #f0f0f0;
+      margin: 0;
+      padding: 20px;
+    }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(6, 60px); /* Original grid size */
+      grid-template-rows: repeat(6, 60px);    /* Original grid size */
+      gap: 2px;
+      margin: 20px auto;
+      width: max-content;
+      border: 2px solid #333; /* Added border for better visibility */
+      background-color: #333; /* Added background for gap color */
+    }
+    .cell {
+      width: 60px;
+      height: 60px;
+      background: #fff;
+      border: 1px solid #ccc;
+      position: relative;
+      display: flex; /* For centering content like arrow/target */
+      justify-content: center;
+      align-items: center;
+    }
+    .target {
+      background: red;
+    }
+    .arrow {
+      width: 0;
+      height: 0;
+      border-left: 15px solid transparent;
+      border-right: 15px solid transparent;
+      border-bottom: 30px solid green;
+      position: absolute;
+      top: 15px;
+      left: 15px;
+      transform-origin: center;
+      transition: transform 0.3s, top 0.3s, left 0.3s; /* Smooth transitions */
+    }
+    .obstacle {
+      background-color: #000; /* Black for obstacles */
+    }
+    #controls {
+      margin: 20px;
+    }
+    button {
+      margin: 5px;
+      padding: 10px 15px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+    #command-list {
+      border: 1px solid #ccc;
+      padding: 10px;
+      min-height: 50px;
+      width: 360px; /* Adjust width to match grid */
+      margin: 10px auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+    .command {
+      background: #e0e0e0;
+      padding: 5px 10px;
+      border-radius: 5px;
+      cursor: grab;
+      position: relative;
+    }
+    #message {
+        margin-top: 20px;
+        font-size: 2em;
+        color: #4CAF50;
+        font-weight: bold;
+        display: none; /* Initially hidden */
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Grid Navigation Game</h1>
+
+  <div id="grid"></div>
+
+  <div id="controls">
+    <button onclick="addCommand('left')">Left</button>
+    <button onclick="addCommand('right')">Right</button>
+    <button onclick="addCommand('forward')">Forward</button>
+    <button onclick="executeCommands()">Execute</button>
+    <button id="reset-button">Reset</button> </div>
+
+  <div id="command-list"></div>
+  <div id="message">Success!</div> <script>
+    const gridSize = 6; // Original grid size
+    const cellSize = 60; // Original cell size
+    const grid = document.getElementById('grid');
+    const commandList = document.getElementById('command-list');
+    const messageElement = document.getElementById('message'); // Success message element
+    const resetButton = document.getElementById('reset-button'); // Reset button element
+
+    let position = { x: 0, y: gridSize - 1 }; // Start at bottom-left
+    let directionIndex = 0; // 0: up, 1: right, 2: down, 3: left
+    const directions = ['up', 'right', 'down', 'left'];
+    let commands = [];
+    let obstacles = []; // Array to store obstacle positions
+
+    function createGrid() {
+      grid.innerHTML = '';
+      grid.style.gridTemplateColumns = `repeat(${gridSize}, ${cellSize}px)`;
+      grid.style.gridTemplateRows = `repeat(${gridSize}, ${cellSize}px)`;
+
+      for (let y = 0; y < gridSize; y++) {
+        for (let x = 0; x < gridSize; x++) {
+          const cell = document.createElement('div');
+          cell.className = 'cell';
+          cell.dataset.x = x;
+          cell.dataset.y = y;
+          grid.appendChild(cell);
+        }
+      }
+    }
+
+    function updateGrid() {
+      // Clear previous arrow and target
+      document.querySelectorAll('.arrow').forEach(el => el.remove());
+      document.querySelectorAll('.target').forEach(el => el.classList.remove('target'));
+      document.querySelectorAll('.obstacle').forEach(el => el.classList.remove('obstacle'));
+
+      // Add target
+      const targetCell = grid.querySelector(`[data-x="${gridSize - 1}"][data-y="0"]`); // Top-right corner
+      if (targetCell) {
+        targetCell.classList.add('target');
+      }
+
+      // Add obstacles
+      obstacles.forEach(obs => {
+        const obstacleCell = grid.querySelector(`[data-x="${obs.x}"][data-y="${obs.y}"]`);
+        if (obstacleCell) {
+          obstacleCell.classList.add('obstacle');
+        }
+      });
+
+      // Add arrow
+      const currentCell = grid.querySelector(`[data-x="${position.x}"][data-y="${position.y}"]`);
+      if (currentCell) {
+        const arrow = document.createElement('div');
+        arrow.className = 'arrow';
+        arrow.style.transform = `rotate(${directionIndex * 90}deg)`;
+        currentCell.appendChild(arrow);
+      }
+    }
+
+    function generateObstacles() {
+        obstacles = [];
+        const maxObstacles = 2;
+        while (obstacles.length < maxObstacles) {
+            const randomX = Math.floor(Math.random() * gridSize);
+            const randomY = Math.floor(Math.random() * gridSize);
+
+            // Ensure obstacles are not on the start, destination, or existing obstacle positions
+            const isStart = randomX === 0 && randomY === gridSize - 1; // Start is (0, gridSize-1)
+            const isDestination = randomX === gridSize - 1 && randomY === 0; // Destination is (gridSize-1, 0)
+            const isExisting = obstacles.some(obs => obs.x === randomX && obs.y === randomY);
+
+            if (!isStart && !isDestination && !isExisting) {
+                obstacles.push({ x: randomX, y: randomY });
+            }
+        }
+    }
+
+    function addCommand(cmd) {
+      commands.push(cmd);
+      const cmdEl = document.createElement('span');
+      cmdEl.className = 'command';
+      cmdEl.textContent = cmd;
+      cmdEl.onclick = (e) => {
+        if (e.button === 0) { // Left click to remove
+          const index = Array.from(commandList.children).indexOf(cmdEl);
+          commands.splice(index, 1);
+          cmdEl.remove();
+        }
+      };
+      // Right click context menu prevention (optional, but good practice)
+      cmdEl.oncontextmenu = (e) => e.preventDefault();
+      commandList.appendChild(cmdEl);
+    }
+
+    function executeCommands() {
+      messageElement.style.display = 'none'; // Hide success message on new execution
+      let i = 0;
+      function step() {
+        if (i >= commands.length) {
+          checkWinCondition(); // Check win condition after all commands executed
+          return;
+        }
+        const cmd = commands[i];
+        let newX = position.x;
+        let newY = position.y;
+        let moved = false;
+
+        if (cmd === 'left') {
+          directionIndex = (directionIndex + 3) % 4;
+        } else if (cmd === 'right') {
+          directionIndex = (directionIndex + 1) % 4;
+        } else if (cmd === 'forward') {
+          if (directions[directionIndex] === 'up') newY--;
+          if (directions[directionIndex] === 'down') newY++;
+          if (directions[directionIndex] === 'left') newX--;
+          if (directions[directionIndex] === 'right') newX++;
+
+          // Check boundaries and obstacles
+          const isValidMove = newX >= 0 && newX < gridSize && newY >= 0 && newY < gridSize;
+          const isObstacle = obstacles.some(obs => obs.x === newX && obs.y === newY);
+
+          if (isValidMove && !isObstacle) {
+            position.x = newX;
+            position.y = newY;
+            moved = true;
+          } else {
+            // Stop execution if hits boundary or obstacle
+            console.log("Blocked by obstacle or boundary!");
+            checkWinCondition(); // Check win condition even if blocked
+            return;
+          }
+        }
+        updateGrid();
+        i++;
+        setTimeout(step, 500); // Delay for visualization
+      }
+      step();
+    }
+
+    function checkWinCondition() {
+        // Destination is (gridSize - 1, 0) (top-right corner)
+        if (position.x === gridSize - 1 && position.y === 0) {
+            messageElement.style.display = 'block'; // Show success message
+        }
+    }
+
+    function resetGame() {
+        position = { x: 0, y: gridSize - 1 }; // Reset to bottom-left
+        directionIndex = 0; // Reset direction to up
+        commands = [];
+        commandList.innerHTML = ''; // Clear commands from display
+        messageElement.style.display = 'none'; // Hide success message
+        generateObstacles(); // Regenerate obstacles
+        updateGrid(); // Update grid with new state
+    }
+
+    // Event listener for the reset button
+    resetButton.addEventListener('click', resetGame);
+
+    // Initial setup
+    createGrid();
+    resetGame(); // Call resetGame to initialize the game with obstacles and correct starting state
+  </script>
+
+</body>
+</html>
